@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Votación – Caso Tracy Latimer</title>
+<style>
+:root{--bg:#f6f4ef;--fg:#1c2733;--ac:#1F3A5F;--ac2:#9B2226;--card:#fff;--mut:#5b6672;--bd:#d6d2c8;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a21;--fg:#eef1f4;--ac:#8fb4e3;--ac2:#f08b8f;--card:#1e2731;--mut:#a3adb8;--bd:#34404c}}
+:root[data-theme="dark"]{--bg:#141a21;--fg:#eef1f4;--ac:#8fb4e3;--ac2:#f08b8f;--card:#1e2731;--mut:#a3adb8;--bd:#34404c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,sans-serif}
+main{max-width:720px;margin:0 auto;padding:18px}
+h1{font:700 clamp(22px,5vw,30px) Georgia,serif;color:var(--ac);margin:0 0 4px}
+.sub{color:var(--mut);margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:16px}
+h2{font:700 18px Georgia,serif;margin:0 0 12px}
+.opt{display:block;width:100%;text-align:left;margin:8px 0;padding:12px 14px;border-radius:10px;border:2px solid var(--bd);background:var(--bg);color:var(--fg);font:600 16px system-ui,sans-serif;cursor:pointer}
+.opt.sel{border-color:var(--ac2)}
+.opt:disabled{opacity:.6;cursor:default}
+.row{margin:10px 0}.lab{display:flex;justify-content:space-between;font-size:15px;margin-bottom:3px}
+.bar{height:16px;background:var(--bg);border:1px solid var(--bd);border-radius:8px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ac);width:0;transition:width .4s}
+.note{font-size:14px;color:var(--mut);margin:8px 0 0}
+.msg{background:var(--card);border-left:5px solid var(--ac2);padding:12px;border-radius:6px;margin-bottom:14px}
+button.s{padding:8px 14px;border-radius:8px;border:1px solid var(--ac2);background:none;color:var(--ac2);font:600 14px system-ui,sans-serif;cursor:pointer}
+</style></head><body><main>
+<h1>Tú decides: caso Tracy Latimer</h1>
+<p class="sub">Voto anónimo. Puedes cambiar tu voto mientras la votación siga abierta.</p>
+<div id="msg"></div>
+<div class="card"><h2>1. ¿Fue éticamente justificable la acción de Robert Latimer?</h2><div id="q1"></div><div id="r1"></div></div>
+<div class="card"><h2>2. ¿Qué argumento te convenció más?</h2><div id="q2"></div><div id="r2"></div></div>
+<p class="note" id="tot"></p>
+<div id="adm"></div>
+<script>
+var Q={q1:[["si","Sí, fue justificable"],["no","No, no fue justificable"],["ns","No estoy seguro/a"]],
+q2:[["con","Consecuencias: acabar un sufrimiento sin salida"],["dig","Dignidad: nadie decide que una vida vale menos"],["pen","Pendiente resbaladiza: medir vidas por su costo"],["soc","Falta de apoyo: la sociedad falló en cuidar"]]};
+var db=null,uid=null,col=null,my={},votes=[],canW=false,isOwner=false;
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+function msg(t){document.getElementById("msg").innerHTML=t?'<div class="msg">'+t+'</div>':''}
+function draw(){
+ ["q1","q2"].forEach(function(q,i){
+  var h="";Q[q].forEach(function(o){h+='<button class="opt'+(my[q]==o[0]?' sel':'')+'" data-q="'+q+'" data-v="'+o[0]+'"'+(canW?'':' disabled')+'>'+(my[q]==o[0]?'✓ ':'')+esc(o[1])+'</button>'});
+  document.getElementById(q).innerHTML=h;
+  var n=votes.filter(function(v){return v[q]}).length,r="";
+  Q[q].forEach(function(o){var c=votes.filter(function(v){return v[q]==o[0]}).length,p=n?Math.round(c*100/n):0;
+   r+='<div class="row"><div class="lab"><span>'+esc(o[1])+'</span><b>'+c+' ('+p+'%)</b></div><div class="bar"><i style="width:'+p+'%"></i></div></div>'});
+  document.getElementById("r"+(i+1)).innerHTML='<p class="note" style="margin-top:14px">Resultados en vivo</p>'+r;
+ });
+ document.getElementById("tot").textContent="Personas que han votado: "+votes.length;
+ document.querySelectorAll(".opt").forEach(function(b){b.onclick=function(){vote(b.dataset.q,b.dataset.v)}});
+}
+function vote(q,v){
+ if(!canW||!col)return;my[q]=v;draw();
+ col.doc(uid).set({q1:my.q1||null,q2:my.q2||null}).catch(function(){msg("No se pudo guardar tu voto. Pide al presentador que te dé permiso de Colaborador.");canW=false;draw()});
+}
+function reset(){
+ if(!confirm("¿Borrar todos los votos?"))return;
+ votes.forEach(function(v){col.doc(v._id).delete()});
+}
+draw();
+(async function(){
+ try{
+  var u=await claude.use("user");db=await claude.use("db");
+  if(!db||!u){msg("Para votar, abre este enlace con tu sesión de Claude iniciada. Si no puedes, vota en el enlace alternativo que muestra el presentador.");return}
+  uid=await u.id();isOwner=u.isOwner();
+  var cw=u.can("data.write");cw=(cw&&cw.then)?await cw:cw;canW=!!uid&&cw!==false;
+  col=db.collection("votes");
+  if(!canW)msg("Solo puedes ver los resultados. Pide al presentador que te comparta como Colaborador para votar.");
+  col.onSnapshot(function(s){
+   votes=s.docs.map(function(d){var x=d.data()||{};x._id=d.id;return x});
+   var m=votes.filter(function(v){return v._id==uid})[0];if(m){my={q1:m.q1,q2:m.q2}}
+   draw();
+  },function(){msg("No se pudieron cargar los resultados.")});
+  if(isOwner)document.getElementById("adm").innerHTML='<button class="s" id="rs">Presentador: reiniciar votación</button>',document.getElementById("rs").onclick=reset;
+ }catch(e){msg("La votación en vivo no está disponible en esta vista.")}
+})();
+</script></main></body></html>
